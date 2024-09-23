@@ -121,7 +121,7 @@ ax.axis('off')
 
 primary_text_color = '#818f86'
 
-match_id = st.sidebar.text_input("Match ID:", placeholder="4506292", value="4506292", help="FotMob Match ID")
+match_id = st.sidebar.text_input("Match ID:", placeholder="4549687", value="4549687", help="FotMob Match ID")
 
 # Maç detaylarını çekmek için matchId kullan
 match_api_url = f"https://www.fotmob.com/api/matchDetails?matchId={match_id}"
