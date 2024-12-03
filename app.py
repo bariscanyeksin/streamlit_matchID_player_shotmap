@@ -121,11 +121,71 @@ ax.axis('off')
 
 primary_text_color = '#818f86'
 
-match_id = st.sidebar.text_input("Match ID:", placeholder="4549687", value="4549687", help="FotMob Match ID")
+match_id = st.sidebar.text_input("Match ID:", placeholder="4506292", value="4506292", help="FotMob Match ID")
+
+def headers_team(team_id):
+    headers = {
+        'accept': '*/*',
+        'accept-language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+        'cache-control': 'no-cache',
+        'pragma': 'no-cache',
+        'priority': 'u=1, i',
+        'referer': f'https://www.fotmob.com/en-GB/teams/{team_id}/',
+        'sec-ch-ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"Windows"',
+        'sec-fetch-dest': 'empty',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-site': 'same-origin',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'x-mas': 'eyJib2R5Ijp7InVybCI6Ii9hcGkvdGVhbXM/aWQ9MTAxODgmY2NvZGUzPVRVUiIsImNvZGUiOjE3MzMyMjc2NzcxMjYsImZvbyI6Ijg5MDUwMjBkNyJ9LCJzaWduYXR1cmUiOiJGQkRGMjNGQjgwREJFQ0YzNzE0MDlFOEMwODFFNkRDQiJ9',
+    }
+    
+    return headers
+
+def headers_match_details():
+    headers = {
+        'accept': '*/*',
+        'accept-language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+        'cache-control': 'no-cache',
+        'pragma': 'no-cache',
+        'priority': 'u=1, i',
+        'referer': 'https://www.fotmob.com/en-GB/',
+        'sec-ch-ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"Windows"',
+        'sec-fetch-dest': 'empty',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-site': 'same-origin',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'x-mas': 'eyJib2R5Ijp7InVybCI6Ii9hcGkvdGVhbXM/aWQ9MTAxODgmY2NvZGUzPVRVUiIsImNvZGUiOjE3MzMyMjc2NzcxMjYsImZvbyI6Ijg5MDUwMjBkNyJ9LCJzaWduYXR1cmUiOiJGQkRGMjNGQjgwREJFQ0YzNzE0MDlFOEMwODFFNkRDQiJ9',
+    }
+    
+    return headers
+
+def headers_player_data(player_id):
+    headers = {
+        'accept': '*/*',
+        'accept-language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+        'cache-control': 'no-cache',
+        'pragma': 'no-cache',
+        'priority': 'u=1, i',
+        'referer': f'https://www.fotmob.com/en-GB/players/{player_id}/',
+        'sec-ch-ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"Windows"',
+        'sec-fetch-dest': 'empty',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-site': 'same-origin',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'x-mas': 'eyJib2R5Ijp7InVybCI6Ii9hcGkvcGxheWVyRGF0YT9pZD0xMDkyMDE1IiwiY29kZSI6MTczMzIyNDA3NjgxOSwiZm9vIjoiNGJkMDI2ODk4In0sInNpZ25hdHVyZSI6IkFFMDUwMEY0NTY1MTU2OUUwQjJBNDlENjdGM0ZBQkI4In0=',
+    }
+    
+    return headers
 
 # Maç detaylarını çekmek için matchId kullan
 match_api_url = f"https://www.fotmob.com/api/matchDetails?matchId={match_id}"
-match_response = requests.get(match_api_url)
+match_response = requests.get(match_api_url, headers=headers_match_details())
 match_data = match_response.json()
 
 if 'general' in match_data:
@@ -193,7 +253,7 @@ if 'general' in match_data:
 
         # Oyuncu görselini URL'den çekme
         url = f'https://images.fotmob.com/image_resources/playerimages/{player_id}.png'
-        response = requests.get(url)
+        response = requests.get(url, headers=headers_player_data(player_id))
         img = mpimg.imread(BytesIO(response.content))
 
         # Görseli ekleme
@@ -213,7 +273,7 @@ if 'general' in match_data:
 
         def get_team_name(team_id):
             api_url = f"https://www.fotmob.com/api/teams?id={team_id}"
-            response = requests.get(api_url)
+            response = requests.get(api_url, headers=headers_team(team_id))
             data = response.json()
             return data
 
