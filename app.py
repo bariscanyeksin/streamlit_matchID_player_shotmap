@@ -322,10 +322,10 @@ if finished == True:
 
             # Oyuncu görselini URL'den çekme
             url = f'https://images.fotmob.com/image_resources/playerimages/{player_id}.png'
-            response = requests.get(url, headers=headers_for_images())
-            content_type = response.headers.get('Content-Type', '')
+            playerimg_response = requests.get(url, headers=headers_for_images())
+            content_type = playerimg_response.headers.get('Content-Type', '')
             if 'image/png' in content_type:
-                img = mpimg.imread(BytesIO(response.content))
+                img = mpimg.imread(BytesIO(playerimg_response.content))
 
                 # Görseli ekleme
                 imagebox = OffsetImage(img, zoom=0.3)
