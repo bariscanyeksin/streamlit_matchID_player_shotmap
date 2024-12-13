@@ -13,9 +13,12 @@ from matplotlib.table import Table
 from datetime import datetime
 import base64
 import io
+import json
+import hashlib
+from bs4 import BeautifulSoup
 
 st.set_page_config(
-    page_title="Süper Lig - Oyuncu Maç Şut Haritası",
+    page_title="Match ID - Player Shotmap",
     initial_sidebar_state="expanded"
 )
 
@@ -123,27 +126,71 @@ primary_text_color = '#818f86'
 
 match_id = st.sidebar.text_input("Match ID:", placeholder="4506292", value="4506292", help="FotMob Match ID")
 
-def headers_team(team_id):
+def get_version_number():
     headers = {
-        'accept': '*/*',
+        'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
         'accept-language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
         'cache-control': 'no-cache',
         'pragma': 'no-cache',
-        'priority': 'u=1, i',
-        'referer': f'https://www.fotmob.com/en-GB/teams/{team_id}/',
+        'priority': 'u=0, i',
+        'referer': 'https://www.google.com/',
         'sec-ch-ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
         'sec-ch-ua-mobile': '?0',
         'sec-ch-ua-platform': '"Windows"',
-        'sec-fetch-dest': 'empty',
-        'sec-fetch-mode': 'cors',
+        'sec-fetch-dest': 'document',
+        'sec-fetch-mode': 'navigate',
         'sec-fetch-site': 'same-origin',
+        'sec-fetch-user': '?1',
+        'upgrade-insecure-requests': '1',
         'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        'x-mas': 'eyJib2R5Ijp7InVybCI6Ii9hcGkvdGVhbXM/aWQ9MTAxODgmY2NvZGUzPVRVUiIsImNvZGUiOjE3MzMyMjc2NzcxMjYsImZvbyI6Ijg5MDUwMjBkNyJ9LCJzaWduYXR1cmUiOiJGQkRGMjNGQjgwREJFQ0YzNzE0MDlFOEMwODFFNkRDQiJ9',
     }
     
-    return headers
+    response = requests.get("https://www.fotmob.com/", headers=headers)
+    soup = BeautifulSoup(response.text, 'html.parser')
+    version_element = soup.find('span', class_=lambda cls: cls and 'VersionNumber' in cls)
+    if version_element:
+        return version_element.text.strip()
+    else:
+        return None
+    
+version_number = get_version_number()
 
-def headers_match_details():
+def get_xmas_pass():
+    url = 'https://raw.githubusercontent.com/bariscanyeksin/streamlit_radar/refs/heads/main/xmas_pass.txt'
+    response = requests.get(url)
+    if response.status_code == 200:
+        file_content = response.text
+        return file_content
+    else:
+        print(f"Failed to fetch the file: {response.status_code}")
+        return None
+    
+xmas_pass = get_xmas_pass()
+
+def create_xmas_header(url, password):
+        try:
+            timestamp = int(datetime.now().timestamp() * 1000)
+            request_data = {
+                "url": url,
+                "code": timestamp,
+                "foo": version_number
+            }
+            
+            json_string = f"{json.dumps(request_data, separators=(',', ':'))}{password.strip()}"
+            signature = hashlib.md5(json_string.encode('utf-8')).hexdigest().upper()
+            body = {
+                "body": request_data,
+                "signature": signature
+            }
+            encoded = base64.b64encode(json.dumps(body, separators=(',', ':')).encode('utf-8')).decode('utf-8')
+            return encoded
+        except Exception as e:
+            return f"Error generating signature: {e}"
+
+def headers_matchDetails(match_id):
+    api_url = "/api/matchDetails?matchId=" + str(match_id)
+    xmas_value = create_xmas_header(api_url, xmas_pass)
+    
     headers = {
         'accept': '*/*',
         'accept-language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
@@ -158,19 +205,20 @@ def headers_match_details():
         'sec-fetch-mode': 'cors',
         'sec-fetch-site': 'same-origin',
         'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        'x-mas': 'eyJib2R5Ijp7InVybCI6Ii9hcGkvdGVhbXM/aWQ9MTAxODgmY2NvZGUzPVRVUiIsImNvZGUiOjE3MzMyMjc2NzcxMjYsImZvbyI6Ijg5MDUwMjBkNyJ9LCJzaWduYXR1cmUiOiJGQkRGMjNGQjgwREJFQ0YzNzE0MDlFOEMwODFFNkRDQiJ9',
+        'x-mas': f'{xmas_value}',
     }
     
     return headers
 
-def headers_player_data(player_id):
+def headers_team_data(team_id, api_url):
+    xmas_value = create_xmas_header(api_url, xmas_pass)
     headers = {
         'accept': '*/*',
         'accept-language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
         'cache-control': 'no-cache',
         'pragma': 'no-cache',
         'priority': 'u=1, i',
-        'referer': f'https://www.fotmob.com/en-GB/players/{player_id}/',
+        'referer': f'https://www.fotmob.com/en-GB/teams/{team_id}/',
         'sec-ch-ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
         'sec-ch-ua-mobile': '?0',
         'sec-ch-ua-platform': '"Windows"',
@@ -178,334 +226,358 @@ def headers_player_data(player_id):
         'sec-fetch-mode': 'cors',
         'sec-fetch-site': 'same-origin',
         'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        'x-mas': 'eyJib2R5Ijp7InVybCI6Ii9hcGkvcGxheWVyRGF0YT9pZD0xMDkyMDE1IiwiY29kZSI6MTczMzIyNDA3NjgxOSwiZm9vIjoiNGJkMDI2ODk4In0sInNpZ25hdHVyZSI6IkFFMDUwMEY0NTY1MTU2OUUwQjJBNDlENjdGM0ZBQkI4In0=',
+        'x-mas': f'{xmas_value}',
     }
+    
+    return headers
+
+def headers_for_images():
+    headers = {
+        'accept': '*/*',
+        'accept-language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+        'cache-control': 'no-cache',
+        'priority': 'u=1, i',
+        'referer': f'https://www.fotmob.com/',
+        'sec-ch-ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"Windows"',
+        'sec-fetch-dest': 'empty',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-site': 'same-origin',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+        }
     
     return headers
 
 # Maç detaylarını çekmek için matchId kullan
 match_api_url = f"https://www.fotmob.com/api/matchDetails?matchId={match_id}"
-match_response = requests.get(match_api_url, headers=headers_match_details())
+match_response = requests.get(match_api_url, headers=headers_matchDetails(match_id))
 match_data = match_response.json()
 
-if 'general' in match_data:
-    general_data = match_data['general']
-    week = general_data['matchRound']
-    matchDay = general_data['matchTimeUTCDate']
-    parsed_date = datetime.fromisoformat(matchDay[:-1])
-    formatted_date = parsed_date.strftime("%Y.%m.%d")
-    leagueName = general_data['leagueName']
-    leagueSeason = general_data['parentLeagueSeason']
-    leagueString = f"{leagueName} - {leagueSeason}"
-    weekString = f"Round {week} | {formatted_date}"
-    
-    df_content = match_data['content']
-    
-    if 'shotmap' in df_content:
+finished = match_data["header"]["status"]["finished"]
 
-        # Şut haritası verilerini al
-        shotmap = match_data['content']['shotmap']['shots']
+if finished == True:
+    if 'general' in match_data:
+        general_data = match_data['general']
+        week = general_data['matchRound']
+        matchDay = general_data['matchTimeUTCDate']
+        parsed_date = datetime.fromisoformat(matchDay[:-1])
+        formatted_date = parsed_date.strftime("%Y.%m.%d")
+        leagueName = general_data['leagueName']
+        leagueSeason = general_data['parentLeagueSeason']
+        leagueString = f"{leagueName} - {leagueSeason}"
+        weekString = f"Round {week} | {formatted_date}"
+        
+        df_content = match_data['content']
+        
+        if 'shotmap' in df_content:
 
-        home_name = general_data['homeTeam']['name']
-        away_name = general_data['awayTeam']['name']
-        skor = match_data['header']['status']['scoreStr']
-        result_string = f"{home_name} {skor} {away_name}"
+            # Şut haritası verilerini al
+            shotmap = match_data['content']['shotmap']['shots']
 
-        ax.text(0.94, 1.075, leagueString, transform=ax.transAxes, fontsize=8, fontproperties=prop, color=primary_text_color,
-                verticalalignment='top', horizontalalignment='right')
+            home_name = general_data['homeTeam']['name']
+            away_name = general_data['awayTeam']['name']
+            skor = match_data['header']['status']['scoreStr']
+            result_string = f"{home_name} {skor} {away_name}"
 
-        ax.text(0.94, 1.035, weekString, transform=ax.transAxes, fontsize=8, fontproperties=prop, color=primary_text_color,
-                verticalalignment='top', horizontalalignment='right')
+            ax.text(0.94, 1.075, leagueString, transform=ax.transAxes, fontsize=8, fontproperties=prop, color=primary_text_color,
+                    verticalalignment='top', horizontalalignment='right')
 
-        ax.text(0.94, 1, result_string, transform=ax.transAxes, fontsize=8, fontproperties=prop, color=primary_text_color,
-                verticalalignment='top', horizontalalignment='right')
+            ax.text(0.94, 1.035, weekString, transform=ax.transAxes, fontsize=8, fontproperties=prop, color=primary_text_color,
+                    verticalalignment='top', horizontalalignment='right')
 
-        # Oyuncu isimleri ve şut sayılarını içeren bir sözlük oluştur
-        player_shot_counts = {}
-        for shot in shotmap:
-            if shot['expectedGoals'] is not None:
-                player_name = shot['fullName']
-                if player_name in player_shot_counts:
-                    player_shot_counts[player_name] += 1
-                else:
-                    player_shot_counts[player_name] = 1
+            ax.text(0.94, 1, result_string, transform=ax.transAxes, fontsize=8, fontproperties=prop, color=primary_text_color,
+                    verticalalignment='top', horizontalalignment='right')
 
-        # Şut sayılarına göre oyuncuları çoktan aza sıralayalım
-        sorted_players = sorted(player_shot_counts.items(), key=lambda item: item[1], reverse=True)
-        sorted_player_names = [player[0] for player in sorted_players]
-
-        # Yeni selectbox: Oyuncu seçimi (şut sayısına göre sıralı)
-        selected_player = st.sidebar.selectbox("Select Player", sorted_player_names)
-
-        # Seçilen oyuncunun şutlarını filtrele
-        player_shots = [shot for shot in shotmap if shot['fullName'] == selected_player]
-
-        # Sol üst köşeye oyuncu ismi ve görselini eklemek için
-        player_name = selected_player
-        player_id = player_shots[0]['playerId']  # Oyuncu ID'sini ilk şuttan alıyoruz
-        team_id = player_shots[-1]['teamId']  # Oyuncu ID'sini ilk şuttan alıyoruz
-
-        player_detailed_stats = match_data['content']['playerStats'][str(player_id)]
-
-        # JSON verilerinde her bir anahtarı kontrol et ve yoksa '-' döndür
-        player_xG_sum = player_detailed_stats.get('stats', [{}])[0].get('stats', {}).get('Expected goals (xG)', {}).get('stat', {}).get('value', '-')
-        player_xGOT_sum = player_detailed_stats.get('stats', [{}])[0].get('stats', {}).get('Expected goals on target (xGOT)', {}).get('stat', {}).get('value', '-')
-
-        # Oyuncu görselini URL'den çekme
-        url = f'https://images.fotmob.com/image_resources/playerimages/{player_id}.png'
-        response = requests.get(url, headers=headers_player_data(player_id))
-        img = mpimg.imread(BytesIO(response.content))
-
-        # Görseli ekleme
-        imagebox = OffsetImage(img, zoom=0.3)
-        ab = AnnotationBbox(imagebox, (0.05, 1.1), frameon=False, xycoords='axes fraction', box_alignment=(0, 1))
-        ax.add_artist(ab)
-
-        # Oyuncu görselini URL'den çekme
-        #url_teamlogo = f'https://images.fotmob.com/image_resources/logo/teamlogo/{team_id}.png'
-        #response_teamlogo = requests.get(url_teamlogo)
-        #img_teamlogo = mpimg.imread(BytesIO(response_teamlogo.content))
-
-        # Görseli ekleme
-        #imagebox_teamlogo = OffsetImage(img_teamlogo, zoom=0.27, alpha=0.3)
-        #ab_teamlogo = AnnotationBbox(imagebox_teamlogo, (0.4497, 0.203), frameon=False, xycoords='axes fraction', box_alignment=(0, 1))
-        #ax.add_artist(ab_teamlogo)
-
-        def get_team_name(team_id):
-            api_url = f"https://www.fotmob.com/api/teams?id={team_id}"
-            response = requests.get(api_url, headers=headers_team(team_id))
-            data = response.json()
-            return data
-
-        team_data = get_team_name(team_id)
-        team_name = team_data["details"]["name"]
-
-        # Oyuncu ismini ekleme
-        ax.text(0.165, 1.07, player_name, transform=ax.transAxes, fontsize=16, fontproperties=bold_prop,
-                verticalalignment='top', horizontalalignment='left', color='white', weight='bold')
-
-        ax.text(0.165, 1.018, team_name, transform=ax.transAxes, fontsize=10, fontproperties=prop,
-                verticalalignment='top', horizontalalignment='left', color=primary_text_color)
-
-        goal_color = '#f5cb36'
-        attemptSaved_color = '#3066d9'
-        miss_color = 'red'
-
-        # Seçilen oyuncunun şut haritasını çiz
-        for shot in player_shots:
-            if shot['expectedGoals'] is not None:
-                if shot['eventType'] == 'Goal':
-                    shot_color = goal_color
-                    pitch.lines(shot['x'], shot['y'], 105, shot['goalCrossedY'], ax=ax, color=to_rgba(shot_color, alpha=0.5), lw=1)
-                    pitch.scatter(shot['x'], shot['y'], ax=ax, c=shot_color, s=round(shot['expectedGoals'], 2)*800, edgecolors='black', marker='*', alpha=0.8, lw=0.5)
-                if shot['eventType'] == 'AttemptSaved':
-                    shot_color = attemptSaved_color
-                    if (shot['isBlocked'] == True) & (shot['expectedGoalsOnTarget'] == 0):
-                        pitch.lines(shot['x'], shot['y'], shot['blockedX'], shot['blockedY'], ax=ax, color=to_rgba(shot_color, alpha=0.5), lw=1)
-                    elif (shot['isBlocked'] == False) & (shot['expectedGoalsOnTarget'] > 0):
-                        pitch.lines(shot['x'], shot['y'], shot['blockedX'], shot['blockedY'], ax=ax, color=to_rgba(shot_color, alpha=0.5), lw=1)
+            # Oyuncu isimleri ve şut sayılarını içeren bir sözlük oluştur
+            player_shot_counts = {}
+            for shot in shotmap:
+                if shot['expectedGoals'] is not None:
+                    player_name = shot['fullName']
+                    if player_name in player_shot_counts:
+                        player_shot_counts[player_name] += 1
                     else:
+                        player_shot_counts[player_name] = 1
+
+            # Şut sayılarına göre oyuncuları çoktan aza sıralayalım
+            sorted_players = sorted(player_shot_counts.items(), key=lambda item: item[1], reverse=True)
+            sorted_player_names = [player[0] for player in sorted_players]
+
+            # Yeni selectbox: Oyuncu seçimi (şut sayısına göre sıralı)
+            selected_player = st.sidebar.selectbox("Select Player", sorted_player_names)
+
+            # Seçilen oyuncunun şutlarını filtrele
+            player_shots = [shot for shot in shotmap if shot['fullName'] == selected_player]
+
+            # Sol üst köşeye oyuncu ismi ve görselini eklemek için
+            player_name = selected_player
+            player_id = player_shots[0]['playerId']  # Oyuncu ID'sini ilk şuttan alıyoruz
+            team_id = player_shots[-1]['teamId']  # Oyuncu ID'sini ilk şuttan alıyoruz
+
+            player_detailed_stats = match_data['content']['playerStats'][str(player_id)]
+
+            # JSON verilerinde her bir anahtarı kontrol et ve yoksa '-' döndür
+            player_xG_sum = player_detailed_stats.get('stats', [{}])[0].get('stats', {}).get('Expected goals (xG)', {}).get('stat', {}).get('value', '-')
+            player_xGOT_sum = player_detailed_stats.get('stats', [{}])[0].get('stats', {}).get('Expected goals on target (xGOT)', {}).get('stat', {}).get('value', '-')
+
+            # Oyuncu görselini URL'den çekme
+            url = f'https://images.fotmob.com/image_resources/playerimages/{player_id}.png'
+            response = requests.get(url, headers=headers_for_images())
+            content_type = response.headers.get('Content-Type', '')
+            if 'image/png' in content_type:
+                img = mpimg.imread(BytesIO(response.content))
+
+                # Görseli ekleme
+                imagebox = OffsetImage(img, zoom=0.3)
+                ab = AnnotationBbox(imagebox, (0.05, 1.1), frameon=False, xycoords='axes fraction', box_alignment=(0, 1))
+                ax.add_artist(ab)
+
+            # Oyuncu görselini URL'den çekme
+            #url_teamlogo = f'https://images.fotmob.com/image_resources/logo/teamlogo/{team_id}.png'
+            #response_teamlogo = requests.get(url_teamlogo)
+            #img_teamlogo = mpimg.imread(BytesIO(response_teamlogo.content))
+
+            # Görseli ekleme
+            #imagebox_teamlogo = OffsetImage(img_teamlogo, zoom=0.27, alpha=0.3)
+            #ab_teamlogo = AnnotationBbox(imagebox_teamlogo, (0.4497, 0.203), frameon=False, xycoords='axes fraction', box_alignment=(0, 1))
+            #ax.add_artist(ab_teamlogo)
+
+            def get_team_name(team_id):
+                api_url = f"/api/teams?id={team_id}"
+                team_data_url = f"https://www.fotmob.com"+api_url
+                team_data_response = requests.get(team_data_url, headers=headers_team_data(team_id, api_url))
+                team_data = team_data_response.json()
+                return team_data
+
+            team_data = get_team_name(team_id)
+            team_name = team_data["details"]["name"]
+
+            # Oyuncu ismini ekleme
+            ax.text(0.165, 1.07, player_name, transform=ax.transAxes, fontsize=16, fontproperties=bold_prop,
+                    verticalalignment='top', horizontalalignment='left', color='white', weight='bold')
+
+            ax.text(0.165, 1.018, team_name, transform=ax.transAxes, fontsize=10, fontproperties=prop,
+                    verticalalignment='top', horizontalalignment='left', color=primary_text_color)
+
+            goal_color = '#f5cb36'
+            attemptSaved_color = '#3066d9'
+            miss_color = 'red'
+
+            # Seçilen oyuncunun şut haritasını çiz
+            for shot in player_shots:
+                if shot['expectedGoals'] is not None:
+                    if shot['eventType'] == 'Goal':
+                        shot_color = goal_color
+                        pitch.lines(shot['x'], shot['y'], 105, shot['goalCrossedY'], ax=ax, color=to_rgba(shot_color, alpha=0.5), lw=1)
+                        pitch.scatter(shot['x'], shot['y'], ax=ax, c=shot_color, s=round(shot['expectedGoals'], 2)*800, edgecolors='black', marker='*', alpha=0.8, lw=0.5)
+                    if shot['eventType'] == 'AttemptSaved':
+                        shot_color = attemptSaved_color
+                        if (shot['isBlocked'] == True) & (shot['expectedGoalsOnTarget'] == 0):
+                            pitch.lines(shot['x'], shot['y'], shot['blockedX'], shot['blockedY'], ax=ax, color=to_rgba(shot_color, alpha=0.5), lw=1)
+                        elif (shot['isBlocked'] == False) & (shot['expectedGoalsOnTarget'] > 0):
+                            pitch.lines(shot['x'], shot['y'], shot['blockedX'], shot['blockedY'], ax=ax, color=to_rgba(shot_color, alpha=0.5), lw=1)
+                        else:
+                            pitch.lines(shot['x'], shot['y'], 105, shot['goalCrossedY'], ax=ax, color=to_rgba(shot_color, alpha=0.25), lw=1)
+                        pitch.scatter(shot['x'], shot['y'], ax=ax, c=shot_color, s=round(shot['expectedGoals'], 2)*800, edgecolors='black', marker='o', alpha=0.8, lw=1.5)
+                    if shot['eventType'] == 'Miss':
+                        shot_color = miss_color
                         pitch.lines(shot['x'], shot['y'], 105, shot['goalCrossedY'], ax=ax, color=to_rgba(shot_color, alpha=0.25), lw=1)
-                    pitch.scatter(shot['x'], shot['y'], ax=ax, c=shot_color, s=round(shot['expectedGoals'], 2)*800, edgecolors='black', marker='o', alpha=0.8, lw=1.5)
-                if shot['eventType'] == 'Miss':
-                    shot_color = miss_color
-                    pitch.lines(shot['x'], shot['y'], 105, shot['goalCrossedY'], ax=ax, color=to_rgba(shot_color, alpha=0.25), lw=1)
-                    pitch.scatter(shot['x'], shot['y'], ax=ax, c=shot_color, s=round(shot['expectedGoals'], 2)*800, edgecolors='black', marker='x', alpha=0.8, lw=1.5)
-                else:
-                    shot_color = 'gray'
+                        pitch.scatter(shot['x'], shot['y'], ax=ax, c=shot_color, s=round(shot['expectedGoals'], 2)*800, edgecolors='black', marker='x', alpha=0.8, lw=1.5)
+                    else:
+                        shot_color = 'gray'
 
-        ax.text(0.937, 0.08, '@bariscanyeksin\nData: FotMob', transform=ax.transAxes,
-                fontsize=7, fontproperties=prop, ha='right', va='bottom', color=primary_text_color, weight='normal', alpha=0.5)
+            ax.text(0.937, 0.08, '@bariscanyeksin\nData: FotMob', transform=ax.transAxes,
+                    fontsize=7, fontproperties=prop, ha='right', va='bottom', color=primary_text_color, weight='normal', alpha=0.5)
 
-        pitch.scatter(58,66,ax=ax,c=goal_color, s=100, edgecolors='black', marker='*', alpha=0.5, lw=0.5)
-        pitch.scatter(56,66,ax=ax,c=attemptSaved_color, s=100, edgecolors='black', marker='o', alpha=0.5, lw=1.5)
-        pitch.scatter(54,66,ax=ax,c=miss_color, s=50, edgecolors='black', marker='x', alpha=0.5, lw=1.5)
+            pitch.scatter(58,66,ax=ax,c=goal_color, s=100, edgecolors='black', marker='*', alpha=0.5, lw=0.5)
+            pitch.scatter(56,66,ax=ax,c=attemptSaved_color, s=100, edgecolors='black', marker='o', alpha=0.5, lw=1.5)
+            pitch.scatter(54,66,ax=ax,c=miss_color, s=50, edgecolors='black', marker='x', alpha=0.5, lw=1.5)
 
-        ax.text(0.1, 0.147, 'Goal', transform=ax.transAxes,
-                fontsize=7, fontproperties=prop, ha='left', va='bottom', color=primary_text_color, weight='normal', alpha=0.5)
-        ax.text(0.1, 0.1155, 'Saved/Block', transform=ax.transAxes,
-                fontsize=7, fontproperties=prop, ha='left', va='bottom', color=primary_text_color, weight='normal', alpha=0.5)
-        ax.text(0.1, 0.082, 'Miss', transform=ax.transAxes,
-                fontsize=7, fontproperties=prop, ha='left', va='bottom', color=primary_text_color, weight='normal', alpha=0.5)
+            ax.text(0.1, 0.147, 'Goal', transform=ax.transAxes,
+                    fontsize=7, fontproperties=prop, ha='left', va='bottom', color=primary_text_color, weight='normal', alpha=0.5)
+            ax.text(0.1, 0.1155, 'Saved/Block', transform=ax.transAxes,
+                    fontsize=7, fontproperties=prop, ha='left', va='bottom', color=primary_text_color, weight='normal', alpha=0.5)
+            ax.text(0.1, 0.082, 'Miss', transform=ax.transAxes,
+                    fontsize=7, fontproperties=prop, ha='left', va='bottom', color=primary_text_color, weight='normal', alpha=0.5)
 
-        # İngilizce terimlerin Türkçe karşılıkları
-        situation_translation = {
-            'RegularPlay': 'Regular Play',
-            'SetPiece': 'Set Piece',
-            'ThrowInSetPiece': 'ThrowInSetPiece',
-            'FreeKick': 'Free Kick',
-            'FastBreak': 'Fast Break',
-            'FromCorner': 'From Corner',
-            'Penalty': 'Penalty',
-            'IndividualPlay': 'Individual Play'
-        }
-
-        shootType_translation = {
-            'RightFoot': 'Right Foot',
-            'LeftFoot': 'Left Foot',
-            'Header': 'Header',
-            'OtherBodyParts': 'OtherBodyParts'
-        }
-
-        result_translation = {
-            'Goal': 'Goal',
-            'Miss': 'Miss',
-            'Post': 'Post'
-        }
-
-        # Şutları tablo olarak göstermek için
-        table_data = [
-            {
-                'Minute': f"{shot['min']}'",
-                'xG': '-' if shot.get('isOwnGoal', False) else round(shot['expectedGoals'], 2) if isinstance(shot['expectedGoals'], (float, int)) else None,
-                'xGOT': '-' if (shot.get('isOwnGoal', False)) or (shot['expectedGoalsOnTarget'] == 0) else round(shot['expectedGoalsOnTarget'], 2) if isinstance(shot['expectedGoalsOnTarget'], (float, int)) else None,
-                'Situation': situation_translation.get(shot['situation'], shot['situation']),
-                'Shot Type': shootType_translation.get(shot['shotType'], shot['shotType']),
-                'Result': 'Saved' if (shot['eventType'] == 'AttemptSaved' and shot['expectedGoalsOnTarget'] > 0) else 'Block' if (shot['eventType'] == 'AttemptSaved' and shot['expectedGoalsOnTarget'] == 0) else result_translation.get(shot['eventType'], shot['eventType'])
+            # İngilizce terimlerin Türkçe karşılıkları
+            situation_translation = {
+                'RegularPlay': 'Regular Play',
+                'SetPiece': 'Set Piece',
+                'ThrowInSetPiece': 'ThrowInSetPiece',
+                'FreeKick': 'Free Kick',
+                'FastBreak': 'Fast Break',
+                'FromCorner': 'From Corner',
+                'Penalty': 'Penalty',
+                'IndividualPlay': 'Individual Play'
             }
-            for shot in player_shots
-        ]
 
-        # DataFrame oluşturma
-        df_shots = pd.DataFrame(table_data)
+            shootType_translation = {
+                'RightFoot': 'Right Foot',
+                'LeftFoot': 'Left Foot',
+                'Header': 'Header',
+                'OtherBodyParts': 'OtherBodyParts'
+            }
 
-        # Toplamlar için yeni bir satır ekleme
-        df_shots.loc[len(df_shots)] = [
-            '',
-            player_xG_sum,
-            player_xGOT_sum,
-            '',
-            '',
-            ''
-        ]
+            result_translation = {
+                'Goal': 'Goal',
+                'Miss': 'Miss',
+                'Post': 'Post'
+            }
 
-        # Sabit genişlik, dinamik yükseklik ve şut haritası altına sabit konum ayarları
-        fixed_table_width = 0.895  # Genişlik sabit
-        column_width = fixed_table_width / len(df_shots.columns)
+            # Şutları tablo olarak göstermek için
+            table_data = [
+                {
+                    'Minute': f"{shot['min']}'",
+                    'xG': '-' if shot.get('isOwnGoal', False) else round(shot['expectedGoals'], 2) if isinstance(shot['expectedGoals'], (float, int)) else None,
+                    'xGOT': '-' if (shot.get('isOwnGoal', False)) or (shot['expectedGoalsOnTarget'] == 0) else round(shot['expectedGoalsOnTarget'], 2) if isinstance(shot['expectedGoalsOnTarget'], (float, int)) else None,
+                    'Situation': situation_translation.get(shot['situation'], shot['situation']),
+                    'Shot Type': shootType_translation.get(shot['shotType'], shot['shotType']),
+                    'Result': 'Saved' if (shot['eventType'] == 'AttemptSaved' and shot['expectedGoalsOnTarget'] > 0) else 'Block' if (shot['eventType'] == 'AttemptSaved' and shot['expectedGoalsOnTarget'] == 0) else result_translation.get(shot['eventType'], shot['eventType'])
+                }
+                for shot in player_shots
+            ]
 
-        # Satır yüksekliğini dinamik olarak belirleme
-        row_height = 0.04  # Her satır için sabit bir yükseklik
-        total_height = row_height * (len(df_shots) + 1)  # Başlık + veri satırları
+            # DataFrame oluşturma
+            df_shots = pd.DataFrame(table_data)
 
-        # Tablonun üst kısmını sabit tutmak için y konumunu ayarlama
-        shotmap_top_y = -0.02  # Şut haritasının hemen altına yerleştirmek için
+            # Toplamlar için yeni bir satır ekleme
+            df_shots.loc[len(df_shots)] = [
+                '',
+                player_xG_sum,
+                player_xGOT_sum,
+                '',
+                '',
+                ''
+            ]
 
-        # Tabloyu yatay olarak ortalamak için x konumunu hesaplama
-        # (Ekseni tam ortalamak için genişliğin yarısını çıkartıyoruz)
-        x_position = (1 - fixed_table_width) / 2
+            # Sabit genişlik, dinamik yükseklik ve şut haritası altına sabit konum ayarları
+            fixed_table_width = 0.895  # Genişlik sabit
+            column_width = fixed_table_width / len(df_shots.columns)
 
-        # Tablonun dinamik yüksekliği için bbox ayarları
-        table = Table(ax, bbox=[x_position, shotmap_top_y - total_height, fixed_table_width, total_height])
+            # Satır yüksekliğini dinamik olarak belirleme
+            row_height = 0.04  # Her satır için sabit bir yükseklik
+            total_height = row_height * (len(df_shots) + 1)  # Başlık + veri satırları
 
-        # Tablo başlığı
-        for j, column in enumerate(df_shots.columns):
-            cell = table.add_cell(0, j, width=column_width, height=row_height, text=column, loc='center', facecolor=to_rgba('lightgray', alpha=0.125))
-            cell.get_text().set_fontproperties(bold_prop)
-            cell.get_text().set_color(primary_text_color)
-            cell.set_edgecolor(to_rgba(primary_text_color, alpha=0.2))
-            cell.get_text().set_fontsize(24)
+            # Tablonun üst kısmını sabit tutmak için y konumunu ayarlama
+            shotmap_top_y = -0.02  # Şut haritasının hemen altına yerleştirmek için
 
-        for i, row in enumerate(df_shots.itertuples(index=False)):
-            for j, value in enumerate(row):
-                # Alt toplam satırı için kontrol
-                if i == len(df_shots) - 1:
-                    if j == 1 or j == 2:  # Sadece xG ve xGOT sütunları
-                        font_prop = bold_prop
-                        facecolor = to_rgba('lightgray', alpha=0.125)
+            # Tabloyu yatay olarak ortalamak için x konumunu hesaplama
+            # (Ekseni tam ortalamak için genişliğin yarısını çıkartıyoruz)
+            x_position = (1 - fixed_table_width) / 2
+
+            # Tablonun dinamik yüksekliği için bbox ayarları
+            table = Table(ax, bbox=[x_position, shotmap_top_y - total_height, fixed_table_width, total_height])
+
+            # Tablo başlığı
+            for j, column in enumerate(df_shots.columns):
+                cell = table.add_cell(0, j, width=column_width, height=row_height, text=column, loc='center', facecolor=to_rgba('lightgray', alpha=0.125))
+                cell.get_text().set_fontproperties(bold_prop)
+                cell.get_text().set_color(primary_text_color)
+                cell.set_edgecolor(to_rgba(primary_text_color, alpha=0.2))
+                cell.get_text().set_fontsize(24)
+
+            for i, row in enumerate(df_shots.itertuples(index=False)):
+                for j, value in enumerate(row):
+                    # Alt toplam satırı için kontrol
+                    if i == len(df_shots) - 1:
+                        if j == 1 or j == 2:  # Sadece xG ve xGOT sütunları
+                            font_prop = bold_prop
+                            facecolor = to_rgba('lightgray', alpha=0.125)
+                            edgecolor = to_rgba(primary_text_color, alpha=0.2)
+                            text = value
+                        else:  # Diğer sütunlar için hücreyi boş bırak
+                            font_prop = prop
+                            facecolor = 'none'
+                            edgecolor = 'none'
+                            text = ''  # Toplam satırındaki diğer sütunları boş bırak
+                    else:
+                        font_prop = prop
+                        facecolor = to_rgba('lightgray', alpha=0)
                         edgecolor = to_rgba(primary_text_color, alpha=0.2)
                         text = value
-                    else:  # Diğer sütunlar için hücreyi boş bırak
-                        font_prop = prop
-                        facecolor = 'none'
-                        edgecolor = 'none'
-                        text = ''  # Toplam satırındaki diğer sütunları boş bırak
-                else:
-                    font_prop = prop
-                    facecolor = to_rgba('lightgray', alpha=0)
-                    edgecolor = to_rgba(primary_text_color, alpha=0.2)
-                    text = value
+                    
+                    # Hücreyi oluştur ve ayarları yap
+                    cell = table.add_cell(i + 1, j, width=column_width, height=row_height, text=text, loc='center')
+                    cell.get_text().set_fontproperties(font_prop)
+                    cell.get_text().set_color(primary_text_color)
+                    cell.set_facecolor(facecolor)
+                    cell.set_edgecolor(edgecolor)
+
+            # Tabloyu eksene ekleme
+            ax.add_table(table)
+
+            ax.axis('off')
+            # Görseli göster
+            st.pyplot(fig)
+
+            player_name_replaced = player_name.replace(" ", "_")
+            match_name_replaced = f"{home_name}_{away_name}"
                 
-                # Hücreyi oluştur ve ayarları yap
-                cell = table.add_cell(i + 1, j, width=column_width, height=row_height, text=text, loc='center')
-                cell.get_text().set_fontproperties(font_prop)
-                cell.get_text().set_color(primary_text_color)
-                cell.set_facecolor(facecolor)
-                cell.set_edgecolor(edgecolor)
+            buf = io.BytesIO()
+            plt.savefig(buf, format="png", dpi = 300, bbox_inches = "tight")
+            buf.seek(0)
+            file_name = f"{player_name_replaced}_{match_name_replaced}_Shotmap.png"
 
-        # Tabloyu eksene ekleme
-        ax.add_table(table)
+            st.download_button(
+                label="Download",
+                data=buf,
+                file_name=file_name,
+                mime="image/png"
+            )
 
-        ax.axis('off')
-        # Görseli göster
-        st.pyplot(fig)
+            # Function to convert image to base64
+            def img_to_base64(img_path):
+                with open(img_path, "rb") as img_file:
+                    return base64.b64encode(img_file.read()).decode()
 
-        player_name_replaced = player_name.replace(" ", "_")
-        match_name_replaced = f"{home_name}_{away_name}"
-            
-        buf = io.BytesIO()
-        plt.savefig(buf, format="png", dpi = 300, bbox_inches = "tight")
-        buf.seek(0)
-        file_name = f"{player_name_replaced}_{match_name_replaced}_Shotmap.png"
+            # Signature section
+            st.sidebar.markdown("---")  # Add a horizontal line to separate your signature from the content
 
-        st.download_button(
-            label="Download",
-            data=buf,
-            file_name=file_name,
-            mime="image/png"
-        )
+            # Load and encode icons
+            twitter_icon_base64 = img_to_base64("icons/twitter.png")
+            github_icon_base64 = img_to_base64("icons/github.png")
+            twitter_icon_white_base64 = img_to_base64("icons/twitter_white.png")  # White version of Twitter icon
+            github_icon_white_base64 = img_to_base64("icons/github_white.png")  # White version of GitHub icon
 
-        # Function to convert image to base64
-        def img_to_base64(img_path):
-            with open(img_path, "rb") as img_file:
-                return base64.b64encode(img_file.read()).decode()
-
-        # Signature section
-        st.sidebar.markdown("---")  # Add a horizontal line to separate your signature from the content
-
-        # Load and encode icons
-        twitter_icon_base64 = img_to_base64("icons/twitter.png")
-        github_icon_base64 = img_to_base64("icons/github.png")
-        twitter_icon_white_base64 = img_to_base64("icons/twitter_white.png")  # White version of Twitter icon
-        github_icon_white_base64 = img_to_base64("icons/github_white.png")  # White version of GitHub icon
-
-        # Display the icons with links at the bottom of the sidebar
-        st.sidebar.markdown(
-            f"""
-            <style>
-            .sidebar {{
-                width: auto;
-            }}
-            .sidebar-content {{
-                display: flex;
-                flex-direction: column;
-                height: 100%;
-                margin-top: 10px;
-            }}
-            .icon-container {{
-                display: flex;
-                justify-content: center;
-                margin-top: auto;
-                padding-bottom: 20px;
-                gap: 30px;  /* Space between icons */
-            }}
-            .icon-container img {{
-                transition: filter 0.5s cubic-bezier(0.4, 0, 0.2, 1);  /* Smooth and natural easing */
-            }}
-            .icon-container a:hover img {{
-                filter: brightness(0) invert(1);  /* Inverts color to white */
-            }}
-            </style>
-            <div class="sidebar-content">
-                <!-- Other sidebar content like selectbox goes here -->
-                <div class="icon-container">
-                    <a href="https://x.com/bariscanyeksin" target="_blank">
-                        <img src="data:image/png;base64,{twitter_icon_base64}" alt="Twitter" width="30">
-                    </a>
-                    <a href="https://github.com/bariscanyeksin" target="_blank">
-                        <img src="data:image/png;base64,{github_icon_base64}" alt="GitHub" width="30">
-                    </a>
+            # Display the icons with links at the bottom of the sidebar
+            st.sidebar.markdown(
+                f"""
+                <style>
+                .sidebar {{
+                    width: auto;
+                }}
+                .sidebar-content {{
+                    display: flex;
+                    flex-direction: column;
+                    height: 100%;
+                    margin-top: 10px;
+                }}
+                .icon-container {{
+                    display: flex;
+                    justify-content: center;
+                    margin-top: auto;
+                    padding-bottom: 20px;
+                    gap: 30px;  /* Space between icons */
+                }}
+                .icon-container img {{
+                    transition: filter 0.5s cubic-bezier(0.4, 0, 0.2, 1);  /* Smooth and natural easing */
+                }}
+                .icon-container a:hover img {{
+                    filter: brightness(0) invert(1);  /* Inverts color to white */
+                }}
+                </style>
+                <div class="sidebar-content">
+                    <!-- Other sidebar content like selectbox goes here -->
+                    <div class="icon-container">
+                        <a href="https://x.com/bariscanyeksin" target="_blank">
+                            <img src="data:image/png;base64,{twitter_icon_base64}" alt="Twitter" width="30">
+                        </a>
+                        <a href="https://github.com/bariscanyeksin" target="_blank">
+                            <img src="data:image/png;base64,{github_icon_base64}" alt="GitHub" width="30">
+                        </a>
+                    </div>
                 </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+                """,
+                unsafe_allow_html=True
+            )
